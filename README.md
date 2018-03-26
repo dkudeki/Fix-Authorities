@@ -14,9 +14,11 @@ The input CSV must have field names in the top row, which follow the following r
 **SearchName** - This is the full name of the person or corporate entity that is being searched for
 #### Optional Columns
 **StartDate** - If the name is accompanied by a date range, the start of that range should go here. If there is only a single associated date, it should also go here.
+
 **EndDate** - If the name is accompanied by a date range, the end of that range should go here, even if the range has no start.
 #### Disallowed Columns
 The following columns will be used to write results. If columns with these names exist in the input CSV, they will be overwritten in the output.
+
 **VIAF LINK**, **VIAF NAME**, **VARIANTS**, **EN_WIKIPEDIA**, **FR_WIKIPEDIA**
 
 ### Running the Script
