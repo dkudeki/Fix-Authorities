@@ -11,20 +11,13 @@ The simple name reconciliation tool uses the VIAF Auto Suggest API to find VIAF 
 ### CSV Formatting
 The input CSV must have field names in the top row, which follow the following rules to allow for proper input and output.
 #### Required Column
-##### SearchName
-This is the full name of the person or corporate entity that is being searched for
+**SearchName** - This is the full name of the person or corporate entity that is being searched for
 #### Optional Columns
-##### StartDate
-If the name is accompanied by a date range, the start of that range should go here. If there is only a single associated date, it should also go here.
-##### EndDate
-If the name is accompanied by a date range, the end of that range should go here, even if the range has no start.
+**StartDate** - If the name is accompanied by a date range, the start of that range should go here. If there is only a single associated date, it should also go here.
+**EndDate** - If the name is accompanied by a date range, the end of that range should go here, even if the range has no start.
 #### Disallowed Columns
 The following columns will be used to write results. If columns with these names exist in the input CSV, they will be overwritten in the output.
-##### VIAF LINK
-##### VIAF NAME
-##### VARIANTS
-##### EN_WIKIPEDIA
-##### FR_WIKIPEDIA
+**VIAF LINK**, **VIAF NAME**, **VARIANTS**, **EN_WIKIPEDIA**, **FR_WIKIPEDIA**
 
 ### Running the Script
 The script reads in the given CSV, and outputs the resulting CSV in the same folder as the input. The default execution of the script expects personal names and outputs just the VIAF link. Running the default script in the command prompt will look like this:
