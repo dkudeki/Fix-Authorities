@@ -6,7 +6,7 @@ Python 2.7: https://www.python.org/download/releases/2.7/
 requests: https://pypi.python.org/pypi/requests/
 
 ## Running the code
-The simple name reconciliation tool uses the VIAF Auto Suggest API to find VIAF links for personal and corporate names. The script reads in a csv with personal or corporate names, and outputs a copy of the CSV that has additional columns with the results. The results can be improved with the inclusion of columns for birth date and death date. By default this tool just outputs the VIAF link for the name, but the tool can be told to output additional data like authorized name, name varaiants and Wikipedia links.
+The simple name reconciliation tool uses the [VIAF Auto Suggest API](https://platform.worldcat.org/api-explorer/apis/VIAF/AuthorityCluster/AutoSuggest) to find VIAF links for personal and corporate names. The script reads in a csv with personal or corporate names, and outputs a copy of the CSV that has additional columns with the results. The results can be improved with the inclusion of columns for birth date and death date. By default this tool just outputs the VIAF link for the name, but the tool can be told to output additional data like authorized name, name varaiants and Wikipedia links.
 
 ### CSV Formatting
 The input CSV must have field names in the top row, which follow the following rules to allow for proper input and output.
