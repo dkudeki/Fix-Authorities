@@ -2,20 +2,40 @@
 ##Requirements
 Python 2.7: https://www.python.org/download/releases/2.7/
 
-SQL Developer: http://www.oracle.com/technetwork/developer-tools/sql-developer/overview/index-097090.html
 ###Required Libraries
 requests: https://pypi.python.org/pypi/requests/
 
-PyZ3950: https://github.com/Brown-University-Library/PyZ3950
-
-pymarc: https://github.com/edsu/pymarc
-
-ply (Windows only): https://pypi.python.org/pypi/ply/
-
 ##Running the code
-Once the requirements have been installed, generate a spreadsheet of problematic headings by running the sql query, and save the output as a csv. Then in the command prompt enter: 
-```
-python fixAuthorities.py query_results.csv
-```
+The simple name reconciliation tool uses the VIAF Auto Suggest API to find VIAF links for personal and corporate names. The script reads in a csv with personal or corporate names, and outputs a copy of the CSV that has additional columns with the results. The results can be improved with the inclusion of columns for birth date and death date. By default this tool just outputs the VIAF link for the name, but the tool can be told to output additional data like authorized name, name varaiants and Wikipedia links.
 
-When the code is done running it will output a MARCXML collection of records that have been updated with fixed headings, as well as several spreadsheets that document which headings have been changed and which were not.
+###CSV Formatting
+The input CSV must have field names in the top row, which follow the following rules to allow for proper input and output.
+####Required Column
+#####SearchName
+This is the full name of the person or corporate entity that is being searched for
+####Optional Columns
+#####StartDate
+If the name is accompanied by a date range, the start of that range should go here. If there is only a single associated date, it should also go here.
+#####EndDate
+If the name is accompanied by a date range, the end of that range should go here, even if the range has no start.
+####Disallowed Columns
+The following columns will be used to write results. If columns with these names exist in the input CSV, they will be overwritten in the output.
+#####VIAF LINK
+#####VIAF NAME
+#####VARIANTS
+#####EN_WIKIPEDIA
+#####FR_WIKIPEDIA
+
+###Running the Script
+The script reads in the given CSV, and outputs the resulting CSV in the same folder as the input. The default execution of the script expects personal names and outputs just the VIAF link. Running the default script in the command prompt will look like this:
+```
+python fixAuthorities.py input.csv
+```
+To run the script on corportate names, include the **-c** option, like this:
+```
+python fixAuthorities.py -c input.csv
+```
+To get extended results like wikipedia links and variant names, use the **-e** option, like this:
+```
+python fixAuthorities.py -e input.csv
+```

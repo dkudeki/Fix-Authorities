@@ -1,28 +1,43 @@
 # -*- coding: utf-8 -*-
-import copy, string, re
+import copy, string, json
 from unicodedata import normalize
-import GeneralUtilities, HandleZ3950, HeadingFunctions
+import GeneralUtilities, HeadingFunctions
 
-def keepPersonalLCNames(suggestion):
+def keepPersonalLCNames(suggestion,nametype):
 	new_results = []
 	for element in suggestion['result']:
 		print element
-		if element['nametype'] == 'personal' and 'lc' in element:
+		if element['nametype'] == nametype:
 			new_results.append(element)
 	if not new_results:
 		return None
 	else:
 		return new_results
 
-def searchNameWithDate(name):
+def searchOnlyName(heading):
+	print "\nSEARCHING ONLY NAME"
+	print heading
+	return heading['name'].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
+
+def searchNameWithoutTrailingComma(heading):
+	print "\nSEARCHING NAME WITHOUT TRAILING COMMAS"
+	if heading['name'][-1:] == ',':
+		return heading['name'][:-1].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
+	else:
+		return False
+
+def searchNameWithoutTrailingPeriod(heading):
+	print "\nSEARCHING NAME WITHOUT TRAILING PERIODS"
+	if heading['name'][-1:] == '.':
+		return heading['name'][:-1].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
+	else:
+		return False
+
+def searchNameWithDate(heading):
 	print "\nSEARCHING NAME WITH DATE"
-	if 'd' in name['subfields']:
-		return_name = name['subfields']['a'].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
-		if type(name['subfields']['d']) is list:
-			for instance in range(0,len(name['subfields']['d'])):
-				return_name += '+' + name['subfields']['d'][instance].replace('.','').replace(',','').replace(' ','+').replace('"',"'").encode('utf-8')
-		else:
-			return_name += '+' + name['subfields']['d'].replace('.','').replace(',','').replace(' ','+').replace('"',"'").encode('utf-8')
+	if 'years' in heading:
+		return_name = heading['name'].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
+		return_name += '+' + heading['years'].rstrip().replace('.','').replace(',','').replace(' ','+').replace('"',"'").encode('utf-8')
 
 		if return_name[len(return_name)-1] == '-':
 			return_name = return_name[:-1]
@@ -31,51 +46,45 @@ def searchNameWithDate(name):
 	else:
 		return False
 
-def searchOnlyName(name):
-	print "\nSEARCHING ONLY NAME"
-	return name['subfields']['a'].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
-
-def searchNameWithTitle(name):
-	print "\nSEARCHING NAME WITH TITLE"
-	if 'c' in name['subfields']:
-		return_name = name['subfields']['a'].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
-		if type(name['subfields']['c']) is list:
-			for instance in range(0,len(name['subfields']['c'])):
-				return_name += '+' + name['subfields']['c'][instance].replace('.','').replace(' ','+').replace('"',"'").encode('utf-8')
-		else:
-			return_name += '+' + name['subfields']['c'].replace('.','').replace(' ','+').replace('"',"'").encode('utf-8')
-
-		return return_name
-	else:
-		return False
-
-def searchNameWithoutTrailingComma(name):
-	print "\nSEARCHING NAME WITHOUT TRAILING COMMAS"
-	if name['subfields']['a'][-1:] == ',':
-		return name['subfields']['a'][:-1].replace(';','').replace(' ','+').replace('"',"'").encode('utf-8')
-	else:
-		return False
-
 #Feed a name from a Voyager record into VIAF's AutoSuggest API, and return the results
 #	The search methods may be different for different heading types
-def queryVIAFAutoSuggest(name):
-	name['subfields']['a'] = HeadingFunctions.removeSpecificBrokenCharacters(name['subfields']['a'])
+def queryVIAFAutoSuggest(heading,nametype):
+	heading['name'] = HeadingFunctions.removeSpecificBrokenCharacters(heading['name'])
 
 	suggestion = { 'result': None }
-	search_methods = [ searchNameWithDate, searchNameWithTitle, searchNameWithoutTrailingComma, searchOnlyName ]
+#	search_methods = [ searchNameWithDate, searchNameWithoutTrailingComma, searchOnlyName ]
+	search_methods = [ searchNameWithDate, searchNameWithoutTrailingPeriod, searchOnlyName ]
+#	url = 'http://www.viaf.org/viaf/search?query=local.corporateNames+all+'
 	url = 'http://www.viaf.org/viaf/AutoSuggest?query='
 	index = 0
 
 	while suggestion['result'] is None and index < len(search_methods):
-		suggestion = HeadingFunctions.searchQueryVariation(name,url,search_methods[index],keepPersonalLCNames,True)
+		suggestion = HeadingFunctions.searchQueryVariation(heading,url,search_methods[index],keepPersonalLCNames,nametype,True)
 		index += 1
 
 	print "LAST CALL: ", suggestion
 	return suggestion
 
+#def queryVIAFSRUSearch(name):
+#	name['subfields']['a'] = HeadingFunctions.removeSpecificBrokenCharacters(name['subfields']['a'])
+#
+#	suggestion = []
+#	search_methods = [ searchNameWithSubordinates, searchNameWithoutTrailingComma, searchOnlyName ]
+#	search_methods = [ searchNameWithSubordinates, searchOnlyName ]
+#	url = 'http://www.viaf.org/viaf/search?query=local.corporateNames+all+"'
+#	index = 0
+#
+#	while len(suggestion) == 0 and index < len(search_methods):
+#		print len(suggestion)
+#		suggestion = HeadingFunctions.SRUSearchQueryVariation(name,url,search_methods[index],True)
+#		index += 1
+#
+#	print "LAST CALL: ", suggestion
+#	return suggestion
+
 #Normalize names so that diacritics are all in the same form, then find how similar the two names are. If they're more
 #	similar than the most similar names found so far, the new name is recorded as the best fit. Otherwise no change
-def compareNames(problematic_name,candidate_name,work_is_present,best,best_score,best_string_length_difference,best_work_present,lc_number,return_lc_number,field_100,return_value):
+def compareNames(problematic_name,candidate_name,best,best_score,best_variants,best_links,candidate_variants,candidate_links,viaf_main_heading,return_value,viaf_number,return_number):
 	if problematic_name != '':
 		normalized_problematic_name = normalize('NFC',problematic_name)
 	else:
@@ -85,172 +94,215 @@ def compareNames(problematic_name,candidate_name,work_is_present,best,best_score
 		normalized_candidate_name = normalize('NFC',candidate_name)
 	else:
 		normalized_candidate_name = ''
-
-	character_range = re.compile(r'[^ -@\[-`{-~]+')
-	if character_range.search(normalized_candidate_name) is not None:
-		lev_distance = GeneralUtilities.calculateLevenshteinDistance(normalized_problematic_name,normalized_candidate_name)
-		string_length_difference = abs(len(normalized_problematic_name)-len(normalized_candidate_name))
-		print 'DIFFERENCE BETWEEN ' + normalized_problematic_name + ' AND ' + normalized_candidate_name + ' = ' + str(lev_distance - string_length_difference)
-
-		if lev_distance - string_length_difference < best_score:
-			if work_is_present or (not work_is_present and not best_work_present):
-				new_best = candidate_name
-				new_best_score = lev_distance - string_length_difference
-				print 'OLD SCORE: ' + str(best_score) + ' NEW SCORE: ' + str(lev_distance - string_length_difference)
-				print 'OLD STRING LENGTH DIFFERENCE: ' + str(best_string_length_difference) + ' NEW STRING LENGTH DIFFERENCE: ' + str(string_length_difference)
-				return (new_best,new_best_score,string_length_difference,work_is_present,field_100,lc_number)
-			else:
-				#If we found an authority record that contains the title in a 670 field, if the new authority doesn't have that too, we should ignore it, even if the lev distance is closer
-				return (best,best_score,best_string_length_difference,best_work_present,return_value,return_lc_number)
-		elif lev_distance - string_length_difference == best_score:
-			if (work_is_present and not best_work_present) or (string_length_difference < best_string_length_difference):
-				new_best = candidate_name
-				new_best_score = lev_distance - string_length_difference
-				print 'OLD SCORE: ' + str(best_score) + ' NEW SCORE: ' + str(lev_distance - string_length_difference)
-				print 'OLD STRING LENGTH DIFFERENCE: ' + str(best_string_length_difference) + ' NEW STRING LENGTH DIFFERENCE: ' + str(string_length_difference)
-				return (new_best,new_best_score,string_length_difference,work_is_present,field_100,lc_number)
-			else:
-				return (best,best_score,best_string_length_difference,best_work_present,return_value,return_lc_number)
-		else:
-			return (best,best_score,best_string_length_difference,best_work_present,return_value,return_lc_number)
+		
+	lev_distance = GeneralUtilities.calculateLevenshteinDistance(normalized_problematic_name,normalized_candidate_name)
+#	string_length_difference = abs(len(normalized_problematic_name)-len(normalized_candidate_name))
+	print 'DIFFERENCE BETWEEN ' + normalized_problematic_name + ' AND ' + normalized_candidate_name + ' = ' + str(lev_distance)
+	if lev_distance < best_score:
+		new_best = candidate_name
+		new_best_score = lev_distance
+		return (new_best,new_best_score,candidate_variants,candidate_links,viaf_main_heading,viaf_number)
 	else:
-		print 'IGNORED ' + normalized_candidate_name
-		return (best,best_score,best_string_length_difference,best_work_present,return_value,return_lc_number)
+		return (best,best_score,best_variants,best_links,return_value,return_number)
 
-def isWorkPresent(lc_works,title):
-	exclude = set(string.punctuation)
-	normalized_title = normalize('NFC',''.join(x for x in title['subfields']['a'] if x not in exclude))
-	print "TITLE: ", normalized_title
-	for work in lc_works:
-		print "WORKED ON TITLE: ", work['subfields']['a']
-		normalized_work = normalize('NFC',''.join(x for x in work['subfields']['a'] if x not in exclude))
-		print "WORKED ON TITLE: ", normalized_work
-		if normalized_title in normalized_work:
-			print "FOUND MATCH: ", normalized_title, normalized_work
-			return True
+def getVIAFRecord(viaf_number):
+	viaf_url = 'https://viaf.org/viaf/' + viaf_number + '/viaf.json'
+	print viaf_url
+	viaf_record = GeneralUtilities.getRequest(viaf_url,True)
+	print "VIAF RECORD: "
+	print viaf_record
+	return viaf_record
 
-	return False
 
 #Look through the AutoSuggest results for an authority record that contains the name we're looking for or something close
 #	This is where we code the judgement calls, and it should vary by heading type. For names we want this function to
 #	take 670 fields into consideration. For Corporate names this is where the 510 field complications would be addressed.
-def findBestAutoSuggestResult(name,lc_numbers,lastCall,title):
-	best = None
-	best_score = 1000000
-	best_string_length_difference = 1000000
-	best_work_present = False
-	return_value = None
-	return_lc_number = ''
-	for lc_number in lc_numbers:
-		print 'BEFORE: ', lastCall
-		#Get the authorized name and the variations from the LC authority record
-		lc_names, lastCall, lc_works = HeadingFunctions.getLCAuthorityRecordContents(lc_number,lastCall,['100','400','500'],['670'])
-
-		work_is_present = isWorkPresent(lc_works,title)
-
-		print 'AFTER: ', lastCall
-		field_100 = None
-		iterator = 0
-		if lc_names:
-			print lc_names
-			while field_100 is None:
-				if lc_names[iterator]['field'] == '100':
-					field_100 = lc_names[iterator]
-				iterator += 1
-
-			#Compare each name from the authority record in 4 ways:	unchanged, without comma, only ASCII characters, only ASCII characters without comma
-			for lc_name in lc_names:
-				print 'COMPARING THE NAMES: ', name['subfields']['a'], ' AND ', lc_name['subfields']['a']
-
-				print 'COMPARING STANDARD'
-				best, best_score, best_string_length_difference, best_work_present, return_value, return_lc_number = compareNames(name['subfields']['a'],lc_name['subfields']['a'],work_is_present,best,best_score,best_string_length_difference,best_work_present,lc_number,return_lc_number,field_100,return_value)
-
-				print 'COMPARING IN "FIRST LAST" FORMAT'
-				revised_name = HeadingFunctions.removeComma(name['subfields']['a'])
-				revised_lc_name = HeadingFunctions.removeComma(lc_name['subfields']['a'])
-				best, best_score, best_string_length_difference, best_work_present, return_value, return_lc_number = compareNames(revised_name,revised_lc_name,work_is_present,best,best_score,best_string_length_difference,best_work_present,lc_number,return_lc_number,field_100,return_value)
-
-				print 'COMPARING ONLY ASCII'
-				name_with_replaced_characters = HeadingFunctions.removeNonASCIICharacters(name['subfields']['a'])
-				lc_name_with_replaced_characters = HeadingFunctions.removeNonASCIICharacters(lc_name['subfields']['a'])
-				best, best_score, best_string_length_difference, best_work_present, return_value, return_lc_number = compareNames(name_with_replaced_characters,lc_name_with_replaced_characters,work_is_present,best,best_score,best_string_length_difference,best_work_present,lc_number,return_lc_number,field_100,return_value)
-
-				print 'COMPARING ONLY ASCII IN "FIRST LAST" FORMAT'
-				revised_name_with_replaced_characters = HeadingFunctions.removeComma(name_with_replaced_characters)
-				revised_lc_name_with_replaced_characters = HeadingFunctions.removeComma(lc_name_with_replaced_characters)
-				best, best_score, best_string_length_difference, best_work_present, return_value, return_lc_number = compareNames(revised_name_with_replaced_characters,revised_lc_name_with_replaced_characters,work_is_present,best,best_score,best_string_length_difference,best_work_present,lc_number,return_lc_number,field_100,return_value)
-
-	print 'BEST FIT: ', best, ' AT ', best_score
-	print 'LC NAME: ', return_value
-	if best_score > 2:
-		return return_value, return_lc_number, False, lastCall
-	else:
-		return return_value, return_lc_number, True, lastCall
-
-#Generate the set of unique LCCNs from the suggestions that have been given
-def getSuggestsedLCCNs(suggestion):
+def findBestAutoSuggestReult(heading,suggestion,outputtype):
 #	print "FIND BEST AUTOSUGGEST RESULT AMONG: ", suggestion
-	lc_numbers = []
+	viaf_numbers = []
+	print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	print suggestion
 
 	#Place all the sugestions from AutoSuggest that list the LCCN into lc_numbers without repeating suggestions
 	for i in range(0,len(suggestion['result'])):
-		if 'lc' in suggestion['result'][i] and suggestion['result'][i]['lc'] not in lc_numbers:
-			lc_numbers.append(suggestion['result'][i]['lc'])
+		print "RESULTS: ", suggestion['result'][i]['viafid']
+		if 'viafid' in suggestion['result'][i] and suggestion['result'][i]['viafid'] not in viaf_numbers:
+			viaf_numbers.append(suggestion['result'][i]['viafid'])
+	best = None
+	best_score = 1000000
+	best_variants = False
+	best_links = False
+	return_value = None
+	return_number = None
+	print "VIAF NUMBERS: ", viaf_numbers
+	for viaf_number in viaf_numbers:
+		viaf_record = json.JSONDecoder().decode(getVIAFRecord(viaf_number))
+		print "VIAF RECORD: "
+		print viaf_record
 
-	return lc_numbers
+		try:
+			if type(viaf_record['ns1:mainHeadings']['ns1:data']) is dict:
+				viaf_main_heading = viaf_record['ns1:mainHeadings']['ns1:data']['ns1:text']
+			else:
+				viaf_main_heading = viaf_record['ns1:mainHeadings']['ns1:data'][0]['ns1:text']
+			print viaf_main_heading
+			if 'ns1:x400s' in viaf_record:
+				viaf_variants = True
+			else:
+				viaf_variants = False
 
-#Feed the given heading into the VIAF AutoSuggest API to generate suggestions for authorized headings. The suggestions
-#	are then processed to find the best fit. If no fit is good enough, or if the API doesn't return any results, the
-#	search is tried again with all periods removed from the search string. The results from the second search are then
-#	judged the same as the first suggestions. If at the end of this process a best-fit has been found, we return that 
-#	along with that fit's LCCN. Otherwise we return None in place of the heading and the LCCN.
-def getBestSolution(name,lastCall,title):
-	suggestions = queryVIAFAutoSuggest(name)
-	print 'GET SUGGESTIONS FOR: ', name
+			viaf_links = False
+			if 'ns1:xLinks' in viaf_record:
+				print "LINKS: ", viaf_record['ns1:xLinks']
+				if type(viaf_record['ns1:xLinks']['ns1:xLink']) is dict:
+					if 'en.wikipedia' in viaf_record['ns1:xLinks']['ns1:xLink']['#text'] or 'fr.wikipedia' in viaf_record['ns1:xLinks']['ns1:xLink']['#text']:
+						if viaf_links == False:
+							viaf_links = [viaf_record['ns1:xLinks']['ns1:xLink']['#text']]
+						else:
+							viaf_links.append(viaf_record['ns1:xLinks']['ns1:xLink']['#text'])
+				else:
+					for instance in viaf_record['ns1:xLinks']['ns1:xLink']:
+						print instance
+						if 'en.wikipedia' in instance['#text'] or 'fr.wikipedia' in instance['#text']:
+							if viaf_links == False:
+								viaf_links = [instance['#text']]
+							else:
+								viaf_links.append(instance['#text'])
+
+			print viaf_links
+
+			names_to_check = [viaf_main_heading]
+			if 'ns1:x400s' in viaf_record:
+				if type(viaf_record['ns1:x400s']['ns1:x400']) is dict:
+					subfield = viaf_record['ns1:x400s']['ns1:x400']['ns1:datafield']['ns1:subfield']
+					if type(subfield) is dict:
+						if subfield['@code'] == 'a' and subfield['#text'] not in names_to_check:
+							names_to_check.append(subfield['#text'])
+					else:
+						for code in subfield:
+							print code
+							if code['@code'] == 'a' and code['#text'] not in names_to_check:
+								names_to_check.append(code['#text'])
+				else:
+					for instance in viaf_record['ns1:x400s']['ns1:x400']:
+						subfield = instance['ns1:datafield']['ns1:subfield']
+						if type(subfield) is dict:
+							if subfield['@code'] == 'a' and subfield['#text'] not in names_to_check:
+								names_to_check.append(subfield['#text'])
+						else:
+							for code in subfield:
+								if code['@code'] == 'a' and code['#text'] not in names_to_check:
+									names_to_check.append(code['#text'])
+
+			print "NAMES TO CHECK: ", names_to_check
+			if len(names_to_check) > 1:
+				viaf_variants = '\n'.join(names_to_check[1:])
+
+			for viaf_name in names_to_check:
+				print 'COMPARING THE NAMES: ', heading['name']+heading['years'], ' AND ', viaf_name
+				best, best_score, best_variants, best_links, return_value, return_number = compareNames(heading['name']+heading['years'],viaf_name,best,best_score,best_variants,best_links,viaf_variants,viaf_links,viaf_main_heading,return_value,viaf_number,return_number)
+
+				revised_name = HeadingFunctions.removeComma(heading['name']+heading['years'])
+				revised_viaf_name = HeadingFunctions.removeComma(viaf_name)
+				best, best_score, best_variants, best_links, return_value, return_number = compareNames(revised_name,revised_viaf_name,best,best_score,best_variants,best_links,viaf_variants,viaf_links,viaf_main_heading,return_value,viaf_number,return_number)
+
+				name_with_replaced_characters = HeadingFunctions.removeNonASCIICharacters(heading['name']+heading['years'])
+				viaf_name_with_replaced_characters = HeadingFunctions.removeNonASCIICharacters(viaf_name)
+				best, best_score, best_variants, best_links, return_value, return_number = compareNames(name_with_replaced_characters,viaf_name_with_replaced_characters,best,best_score,best_variants,best_links,viaf_variants,viaf_links,viaf_main_heading,return_value,viaf_number,return_number)
+
+				revised_name_with_replaced_characters = HeadingFunctions.removeComma(name_with_replaced_characters)
+				revised_viaf_name_with_replaced_characters = HeadingFunctions.removeComma(viaf_name_with_replaced_characters)
+				best, best_score, best_variants, best_links, return_value, return_number = compareNames(revised_name_with_replaced_characters,revised_viaf_name_with_replaced_characters,best,best_score,best_variants,best_links,viaf_variants,viaf_links,viaf_main_heading,return_value,viaf_number,return_number)
+
+			print "BEST SCORE: ", best_score
+		except KeyError:
+			pass
+
+	if best_score <= 2:
+		if outputtype == 'extended':
+			return return_value, return_number, best_variants, best_links, True
+		else:
+			return None, return_number, None, None, True
+	else:
+		return None, None, None, None, False
+
+#Search through the suggestions for valid LC form of name. If nothing turns up run an altered query on AutoSuggest.
+#	If still nothing, simply return None
+#	Should be static across all heading types, but queryVIAFAutoSuggest and findBestAutoSuggestResult may vary
+def getVIAFSuggestion(heading,nametype,outputtype):
+	suggestions = queryVIAFAutoSuggest(heading,nametype)
+	print 'GET SUGGESTIONS FOR: ', heading['name']
 	print 'SUGGESTIONS: ', suggestions
 	if suggestions['result'] is not None:
-		lc_numbers = getSuggestsedLCCNs(suggestions)
-		lc_name, lc_number, confident, lastCall = findBestAutoSuggestResult(name,lc_numbers,lastCall,title)
+		viaf_name, viaf_number, variants, wikipedia, confident = findBestAutoSuggestReult(heading,suggestions,outputtype)
 		if not confident:
-			new_name = copy.deepcopy(name)
-			print new_name['subfields']['a'], name['subfields']['a']
-			new_name['subfields']['a'] = new_name['subfields']['a'].replace('.','')
-			print new_name['subfields']['a'], name['subfields']['a']
-			if new_name['subfields']['a'] != name['subfields']['a']:
+			new_heading = copy.deepcopy(heading)
+			print new_heading['name'], heading['name']
+			new_heading['name'] = new_heading['name'].replace('.','')
+			print new_heading['name'], heading['name']
+			if new_heading != heading:
 				print "\nSEARCH WITHOUT ANY PERIODS"
-				new_suggestion = queryVIAFAutoSuggest(new_name)
-				print "NEW SUGGESTION: ", new_suggestion
+				new_suggestion = queryVIAFAutoSuggest(new_heading,nametype)
 				if new_suggestion['result'] is not None:
-					#Make sure we're not looking at LCCNs we've already checked
-					new_suggested_lc_numbers = getSuggestsedLCCNs(new_suggestion)
-					new_lc_numbers = []
-					print new_suggested_lc_numbers
-					for number in new_suggested_lc_numbers:
-						if number not in lc_numbers:
-							new_lc_numbers.append(number)
-					print new_lc_numbers
-
-					if len(new_lc_numbers) > 0:
-						lc_name, lc_number, confident, lastCall = findBestAutoSuggestResult(new_name,new_lc_numbers,lastCall,title)
+					viaf_name, viaf_number, variants, wikipedia, confident = findBestAutoSuggestReult(new_heading,new_suggestion,outputtype)
 	else:
-		new_name = copy.deepcopy(name)
-		print new_name['subfields']['a'], name['subfields']['a']
-		new_name['subfields']['a'] = new_name['subfields']['a'].replace('.','')
-		print new_name['subfields']['a'], name['subfields']['a']
-		if new_name['subfields']['a'] != name['subfields']['a']:
+		new_heading = copy.deepcopy(heading)
+		print new_heading['name'], heading['name']
+		new_heading['name'] = new_heading['name'].replace('.','')
+		print new_heading['name'], heading['name']
+		if new_heading != heading:
 			print "\nSEARCH WITHOUT ANY PERIODS"
-			new_suggestion = queryVIAFAutoSuggest(new_name)
+			new_suggestion = queryVIAFAutoSuggest(new_heading,nametype)
 			print "NEW SUGGESTIONS: ", new_suggestion
 			if new_suggestion['result'] is not None:
-				lc_numbers = getSuggestsedLCCNs(new_suggestion)
-				lc_name, lc_number, confident, lastCall = findBestAutoSuggestResult(new_name,lc_numbers,lastCall,title)
-				print lc_name
+				viaf_name, viaf_number, variants, wikipedia, confident = findBestAutoSuggestReult(new_heading,new_suggestion,outputtype)
 			else:
-				lc_name = None
-				lc_number = None
+				viaf_name = None
+				viaf_number = None
+				variants = None
+				wikipedia = None
 				confident = False
 		else:
-			lc_name = None
-			lc_number = None
+			viaf_name = None
+			viaf_number = None
+			variants = None
+			wikipedia = None
 			confident = False
-	return lc_name, lc_number, confident, lastCall
+	return viaf_name, viaf_number, variants, wikipedia
+#	return viaf_number
+
+#Search for the name in VIAF, and use the results to determie if the name is correct, incorect but changable, or totally incorrect
+#	The tags passed to doubleCheckHeading should vary by heading type
+def findName(row,nametype,outputtype):
+	heading = {}
+	heading['name'] = row['SearchName'].decode('utf-8')
+	heading['years'] = ''
+	if 'StartDate' in row or 'EndDate' in row:
+		if row['StartDate'] != '':
+			heading['years'] = row['StartDate']
+
+		if row['EndDate'] != '':
+			heading['years'] +=  '-' + row['EndDate']
+
+		if heading['years'] != '':
+			heading['years'] = ', ' + heading['years']
+
+	print 'CSV NAME: ', heading['name']
+	viaf_name, viaf_number, variants, wikipedia = getVIAFSuggestion(heading,nametype,outputtype)
+
+	row['VIAF LINK'] = 'http://viaf.org/viaf/' + viaf_number if viaf_number else viaf_number
+
+	if outputtype == 'extended':
+		en_wiki = None
+		fr_wiki = None
+		if wikipedia:
+			for entry in wikipedia:
+				if 'en.wikipedia' in entry:
+					en_wiki = entry
+				elif 'fr.wikipedia' in entry:
+					fr_wiki = entry
+
+		row['VIAF NAME'] = viaf_name if viaf_name else ''
+		row['VARIANTS'] = variants if variants else ''
+		row['EN_WIKIPEDIA'] = en_wiki if en_wiki else ''
+		row['FR_WIKIPEDIA'] = fr_wiki if fr_wiki else ''

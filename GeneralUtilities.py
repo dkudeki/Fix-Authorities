@@ -2,23 +2,9 @@
 import sys, json, os, datetime, time, copy, re, string, requests
 from datetime import timedelta
 from StringIO import StringIO
-from pymarc import Record, record_to_xml
 from unicodedata import normalize
 import xml.etree.ElementTree as ET
 import codecs
-
-class Logger(object):
-	def __init__(self,*files):
-		self.files = files
-
-	def write(self,obj):
-		for f in self.files:
-			f.write(obj)
-			f.flush()
-
-	def flush(self):
-		for f in self.files:
-			f.flush()
 
 #Continue requesting url if connection is dropped.
 def getRequest(url,include_timeout):
@@ -27,13 +13,7 @@ def getRequest(url,include_timeout):
 			results = requests.get(url, timeout=10).content
 		else:
 			results = requests.get(url).content
-
-		if '<title>503 Service Temporarily Unavailable</title>' in results:
-			print "Service Temporarily Unavailable at" + url
-			print "Trying again."
-			return getRequest(url,include_timeout)
-		else:
-			return results
+		return results
 	except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
 		print "Connection Error on " + url
 		print "Trying again."
@@ -71,29 +51,12 @@ def calculateLevenshteinDistance(string1,string2):
 	return matrix[len(string1)][len(string2)]
 
 #Returns a score based on the lev distance between the two names, and maybe the longest common string
-def getSimilarityScore(problem,solution,potential_subfields):
+def getSimilarityScore(problem,solution):
 	built_string = solution['subfields']['a']
-#	potential_subfields = ['b','c','d']
-#	potential_subfields = ['b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s','t','v','x','y','z','0','2','3','4','5','7','8']
-
-	for subfield in potential_subfields:
-		if subfield in solution['subfields']:
-			if type(solution['subfields'][subfield]) is list:
-				for index in range(0,len(solution['subfields'][subfield])):
-					built_string += ' ' + solution['subfields'][subfield][index]
-			else:
-				built_string += ' ' + solution['subfields'][subfield]
-
+	if 'b' in solution['subfields']:
+		built_string += ' ' + solution['subfields']['b']
+	if 'c' in solution['subfields']:
+		built_string += ' ' + solution['subfields']['c']
+	if 'd' in solution['subfields']:
+		built_string += ' ' + solution['subfields']['d']
 	return calculateLevenshteinDistance(problem,built_string)
-
-#Given the heading from voyager, create a string based on the subfields
-def buildHeadingAsString(name,sequence):
-	voyager_heading = 'a' + name['subfields']['a'].encode('utf-8')
-	for index in range(0,len(sequence)):
-		if sequence[index] in name['subfields']:
-			if type(name['subfields'][sequence[index]]) is list:
-				for instance in range(0,len(name['subfields'][sequence[index]])):
-					voyager_heading += ' ' + sequence[index] + name['subfields'][sequence[index]][instance].encode('utf-8')
-			else:
-				voyager_heading += ' ' + sequence[index] + name['subfields'][sequence[index]].encode('utf-8')
-	return voyager_heading
